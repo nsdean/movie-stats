@@ -162,7 +162,7 @@ def build_films_df(films_list):
     return df
 
 
-def rankings(director_df):
+def rankings(director_df, director=False, actor=False):
     """Determine rankings for directors.
 
     Calculate the total films, profit and budgets for directors, their average
@@ -171,9 +171,14 @@ def rankings(director_df):
 
     import pandas as pd
 
-    count = director_df.groupby(['director'])['title'].count()
-    profit = director_df.groupby(['director'])['profit_adj'].sum()
-    budget = director_df.groupby(['director'])['budget_adj'].sum()
+    if director == True:
+        role = 'director'
+    if actor == True:
+        role = 'actor'
+
+    count = director_df.groupby([role])['title'].count()
+    profit = director_df.groupby([role])['profit_adj'].sum()
+    budget = director_df.groupby([role])['budget_adj'].sum()
 
     rank = pd.concat([count, profit, budget], axis=1, sort=False) \
             .reset_index() \
@@ -185,13 +190,13 @@ def rankings(director_df):
     rank['budget_rank'] = rank['budget_adj'].rank(method='max', ascending=False)
     rank['average_profit_rank'] = rank['average_profit'].rank(method='max', ascending=False)
 
-    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
-                      on='director', how='left')
+    rank = rank.merge(director_df[['gender',role]].drop_duplicates(role),
+                      on=role, how='left')
 
     return rank
 
 
-def rankings_decades(director_df):
+def rankings_decades(director_df, director=False, actor=False):
     """Determine rankings for directors by decade.
 
     For each decade, calculate the total films, profit and budgets for directors, their average
@@ -200,9 +205,14 @@ def rankings_decades(director_df):
 
     import pandas as pd
 
-    count = director_df.groupby(['director','decade'])['title'].count()
-    profit = director_df.groupby(['director','decade'])['profit_adj'].sum()
-    budget = director_df.groupby(['director','decade'])['budget_adj'].sum()
+    if director == True:
+        role = 'director'
+    if actor == True:
+        role = 'actor'
+
+    count = director_df.groupby([role,'decade'])['title'].count()
+    profit = director_df.groupby([role,'decade'])['profit_adj'].sum()
+    budget = director_df.groupby([role,'decade'])['budget_adj'].sum()
 
     rank = pd.concat([count, profit, budget], axis=1, sort=False) \
             .reset_index() \
@@ -214,13 +224,13 @@ def rankings_decades(director_df):
     rank['budget_rank'] = rank.groupby(['decade'])['budget_adj'].rank(method='max', ascending=False)
     rank['average_profit_rank'] = rank.groupby(['decade'])['average_profit'].rank(method='max', ascending=False)
 
-    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
-                      on='director', how='left')
+    rank = rank.merge(director_df[['gender',role]].drop_duplicates(role),
+                      on=role, how='left')
 
     return rank
 
 
-def rankings_year(director_df):
+def rankings_years(director_df, director=False, actor=False):
     """Determine rankings for directors by year.
 
     For each year, calculate the total films, profit and budgets for directors, their average
@@ -229,9 +239,14 @@ def rankings_year(director_df):
 
     import pandas as pd
 
-    count = director_df.groupby(['director','year'])['title'].count()
-    profit = director_df.groupby(['director','year'])['profit_adj'].sum()
-    budget = director_df.groupby(['director','year'])['budget_adj'].sum()
+    if director == True:
+        role = 'director'
+    if actor == True:
+        role = 'actor'
+
+    count = director_df.groupby([role,'year'])['title'].count()
+    profit = director_df.groupby([role,'year'])['profit_adj'].sum()
+    budget = director_df.groupby([role,'year'])['budget_adj'].sum()
 
     rank = pd.concat([count, profit, budget], axis=1, sort=False) \
             .reset_index() \
@@ -243,7 +258,7 @@ def rankings_year(director_df):
     rank['budget_rank'] = rank.groupby(['year'])['budget_adj'].rank(method='max', ascending=False)
     rank['average_profit_rank'] = rank.groupby(['year'])['average_profit'].rank(method='max', ascending=False)
 
-    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
-                      on='director', how='left')
+    rank = rank.merge(director_df[['gender',role]].drop_duplicates(role),
+                      on=role, how='left')
 
     return rank
