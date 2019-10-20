@@ -96,13 +96,20 @@ def bin_budget(df):
 
     import pandas as pd
 
-    bins = [0, 2000000, 5000000, 10000000, 30000000,
-            50000000, 100000000, 250000000, 300000000]
+    # bins = [0, 2000000, 5000000, 10000000, 30000000,
+    #         50000000, 100000000, 250000000, 300000000]
+    #
+    # labels = ['0-2M', '2-5M', '5-10M', '10-30M',
+    #           '30-50M', '50-100M', '100-250M', '250-300M']
 
-    labels = ['0-2M', '2-5M', '5-10M', '10-30M',
-              '30-50M', '50-100M', '100-250M', '250-300M']
+    bins = [1, 2000000, 5000000, 10000000, 30000000, 50000000, 100000000,
+            150000000, 250000000, 300000000, 600000000]
+
+    labels = ['<2M', '2-5M', '5-10M', '10-30M', '30-50M', '50-100M', '100-150M',
+              '150-250M', '250-300M', '>300M']
 
     df['budget_bin'] = pd.cut(df['budget'], bins, labels=labels)
+    df['budget_adj_bin'] = pd.cut(df['budget_adj'], bins, labels=labels)
 
     return df
 
@@ -129,11 +136,11 @@ def build_films_df(films_list):
 
     df['decade'] = ((df.year)//10)*10
 
-    df['budget_adj'] = df[df['year'] != 2019] \
-        .apply(lambda x: cpi.inflate(x['budget'], x['year']), axis=1)
+    df['budget_adj'] = df.apply(lambda x: cpi.inflate(x['budget'], x['year'])
+        if (x['year'] !=2019) else x['budget'], axis=1)
 
-    df['revenue_adj'] = df[df['year'] != 2019] \
-        .apply(lambda x: cpi.inflate(x['revenue'], x['year']), axis=1)
+    df['revenue_adj'] = df.apply(lambda x: cpi.inflate(x['revenue'], x['year'])
+        if (x['year'] !=2019) else x['revenue'], axis=1)
 
     df['profit'] = df['revenue'] - df['budget']
 
@@ -142,3 +149,90 @@ def build_films_df(films_list):
     df = movies.bin_budget(df)
 
     return df
+
+
+def rankings(director_df):
+    """Determine rankings for directors.
+
+    Calculate the total films, profit and budgets for directors, their average
+    profit per film, and then their rankings for each of those categories.
+    """
+
+    import pandas as pd
+
+    count = director_df.groupby(['director'])['title'].count()
+    profit = director_df.groupby(['director'])['profit_adj'].sum()
+    budget = director_df.groupby(['director'])['budget_adj'].sum()
+
+    rank = pd.concat([count, profit, budget], axis=1, sort=False) \
+            .reset_index() \
+            .sort_values('title', ascending=False) \
+            .rename(columns={'title': 'films', 'budget': 'total_budget'})
+
+    rank['average_profit'] = rank['profit_adj'] / rank['films']
+    rank['profit_rank'] = rank['profit_adj'].rank(method='max', ascending=False)
+    rank['budget_rank'] = rank['budget_adj'].rank(method='max', ascending=False)
+    rank['average_profit_rank'] = rank['average_profit'].rank(method='max', ascending=False)
+
+    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
+                      on='director', how='left')
+
+    return rank
+
+
+def rankings_decades(director_df):
+    """Determine rankings for directors by decade.
+
+    For each decade, calculate the total films, profit and budgets for directors, their average
+    profit per film, and then their rankings for each of those categories.
+    """
+
+    import pandas as pd
+
+    count = director_df.groupby(['director','decade'])['title'].count()
+    profit = director_df.groupby(['director','decade'])['profit_adj'].sum()
+    budget = director_df.groupby(['director','decade'])['budget_adj'].sum()
+
+    rank = pd.concat([count, profit, budget], axis=1, sort=False) \
+            .reset_index() \
+            .sort_values('title', ascending=False) \
+            .rename(columns={'title': 'films', 'budget': 'total_budget'})
+
+    rank['average_profit'] = rank['profit_adj'] / rank['films']
+    rank['profit_rank'] = rank.groupby(['decade'])['profit_adj'].rank(method='max', ascending=False)
+    rank['budget_rank'] = rank.groupby(['decade'])['budget_adj'].rank(method='max', ascending=False)
+    rank['average_profit_rank'] = rank.groupby(['decade'])['average_profit'].rank(method='max', ascending=False)
+
+    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
+                      on='director', how='left')
+
+    return rank
+
+
+def rankings_year(director_df):
+    """Determine rankings for directors by year.
+
+    For each year, calculate the total films, profit and budgets for directors, their average
+    profit per film, and then their rankings for each of those categories.
+    """
+
+    import pandas as pd
+
+    count = director_df.groupby(['director','year'])['title'].count()
+    profit = director_df.groupby(['director','year'])['profit_adj'].sum()
+    budget = director_df.groupby(['director','year'])['budget_adj'].sum()
+
+    rank = pd.concat([count, profit, budget], axis=1, sort=False) \
+            .reset_index() \
+            .sort_values('title', ascending=False) \
+            .rename(columns={'title': 'films', 'budget': 'total_budget'})
+
+    rank['average_profit'] = rank['profit_adj'] / rank['films']
+    rank['profit_rank'] = rank.groupby(['year'])['profit_adj'].rank(method='max', ascending=False)
+    rank['budget_rank'] = rank.groupby(['year'])['budget_adj'].rank(method='max', ascending=False)
+    rank['average_profit_rank'] = rank.groupby(['year'])['average_profit'].rank(method='max', ascending=False)
+
+    rank = rank.merge(director_df[['gender','director']].drop_duplicates('director'),
+                      on='director', how='left')
+
+    return rank
