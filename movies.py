@@ -1,3 +1,14 @@
+def get_films_data(start_date, end_date):
+    """Build a dataframe of information about movies between two dates."""
+    import movies
+
+    films = movies.list_of_films(start_date, end_date)
+    films_list = movies.get_film_list_details(films)
+    df = movies.build_films_df(films_list)
+
+    return df
+
+
 def list_of_films(start_date, end_date):
     """Query TMDb for movies between two dates.
 
