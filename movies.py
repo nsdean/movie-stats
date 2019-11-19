@@ -1,3 +1,7 @@
+from tqdm import tqdm_notebook as tqdm
+import requests
+import pandas as pd
+
 def get_films_data(start_date, end_date):
     """Build a dataframe of information about movies between two dates."""
     import movies
@@ -33,7 +37,7 @@ def list_of_films(start_date, end_date):
     import pandas as pd
     import requests
     import config
-    api_key = config.api_key
+    api_key = config.tmdb_key
     from tqdm import tqdm_notebook as tqdm
     # tqdm().pandas()
 
@@ -51,6 +55,7 @@ def list_of_films(start_date, end_date):
 
     films_list = []
 
+    print('Get list of films.')
     for page in tqdm(range(1, pages+1)):
         response = requests.get(query_string + '&page={}'.format(page))
         films = response.json()['results']
@@ -64,20 +69,24 @@ def get_film_details(films):
 
     import requests
     import config
-    api_key = config.api_key
+    api_key = config.tmdb_key
     from tqdm import tqdm_notebook as tqdm
 
     films_list = []
 
     for film in tqdm(films):
-        entry = requests.get('https://api.themoviedb.org/3/movie/'
-                               + str(film['id'])
-                               + '?api_key=' + api_key
-                               + '&language=en-US'
-                               + '&append_to_response=credits'
-                            )
-        entry = (entry.json())
-        films_list += [entry]
+        try:
+            entry = requests.get('https://api.themoviedb.org/3/movie/'
+                                   + str(film['id'])
+                                   + '?api_key=' + api_key
+                                   + '&language=en-US'
+                                   + '&append_to_response=credits'
+                                )
+            entry = (entry.json())
+            films_list += [entry]
+        except:
+            print('Couldn\'t get film ' + str(film['id']))
+            continue
 
     return films_list
 
@@ -92,6 +101,8 @@ def get_film_list_details(films):
 
     from tqdm import tqdm_notebook as tqdm
 
+    print('Get details for each film.')
+
     idchunks = [films[x:x + 250] for x in range(0, len(films), 250)]
 
     filmslist = []
@@ -100,6 +111,55 @@ def get_film_list_details(films):
         filmslist.extend(results)
 
     return filmslist
+
+
+def get_imdb_data(film_df):
+    from bs4 import BeautifulSoup
+
+    budget_list = []
+    revenue_list = []
+    id_list = []
+
+    idchunks = [film_df[x:x + 250] for x in range(0, len(film_df), 250)]
+
+    print('Getting results from IMDb...')
+
+    for ids in tqdm(idchunks):
+        for id_ in tqdm(ids['imdb_id']):
+            url = 'https://www.imdb.com/title/' + id_
+            id_list.append(id_)
+
+            response = requests.get(url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            text_box = soup.find_all('div', class_='txt-block')
+
+            if (soup.find(text='Budget:') is None):
+                budget_list.append(0)
+
+            if (soup.find(text='Cumulative Worldwide Gross:') is None):
+                revenue_list.append(0)
+
+            for t in text_box:
+                try:
+                    heading = t.find('h4').getText()
+                    if heading == 'Budget:':
+                        t1 = t.find('h4').next_sibling
+                        t2 = t1.rstrip().lstrip('$')
+                        t3 = int(t2.replace(',',''))
+                        budget_list.append(t3)
+                    if heading == 'Cumulative Worldwide Gross:':
+                        r1 = t.find('h4').next_sibling
+                        r2 = r1.strip().lstrip('$')
+                        r3 = int(r2.replace(',',''))
+                        revenue_list.append(r3)
+
+                except:
+                    continue
+
+    imdb_data = pd.DataFrame(list(zip(id_list, budget_list, revenue_list)),
+                         columns=['imdb_id', 'budget_imdb', 'revenue_imdb'])
+    return imdb_data
 
 
 def bin_budget(df):
@@ -137,10 +197,21 @@ def build_films_df(films_list):
     import movies
 
     df = pd.DataFrame(films_list) \
-        .drop(columns=['adult', 'backdrop_path', 'imdb_id', 'homepage',
+        .drop(columns=['adult', 'backdrop_path', 'homepage',
                        'overview', 'poster_path', 'tagline', 'video',
                        'belongs_to_collection', 'original_title'])
 
+    print('Get missing budget and revenue data from IMDb.')
+    no_budget_revenue = df[(df['budget']==0) | (df['revenue']==0)].reset_index(drop=True)
+
+    imdb_data = get_imdb_data(no_budget_revenue)
+
+    df = df.merge(imdb_data, on='imdb_id', how='left')
+
+    print('Get financial information.')
+    df['budget'].replace(0, df['budget_imdb'], inplace=True)
+    df['revenue'].replace(0, df['revenue_imdb'], inplace=True)
+    df['budget'].fillna(0, inplace=True)
     df['release_date'] = pd.to_datetime(df['release_date'])
 
     df['year'] = df['release_date'].dt.year
