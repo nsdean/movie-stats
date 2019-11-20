@@ -1,14 +1,19 @@
 from tqdm import tqdm_notebook as tqdm
 import requests
 import pandas as pd
+import config
+tmdb_key = config.tmdb_key
+omdb_key = config.omdb_key
+from bs4 import BeautifulSoup
+import cpi
 
 def get_films_data(start_date, end_date):
     """Build a dataframe of information about movies between two dates."""
-    import movies
 
-    films = movies.list_of_films(start_date, end_date)
-    films_list = movies.get_film_list_details(films)
-    df = movies.build_films_df(films_list)
+    films = list_of_films(start_date, end_date)
+    films_list = get_film_list_details(films)
+    df = build_films_df(films_list)
+    print('Done.')
 
     return df
 
@@ -34,15 +39,8 @@ def list_of_films(start_date, end_date):
     and '&without_genres=99|10770' filters out documentaries and TV movies.
     """
 
-    import pandas as pd
-    import requests
-    import config
-    api_key = config.tmdb_key
-    from tqdm import tqdm_notebook as tqdm
-    # tqdm().pandas()
-
     query_string = 'https://api.themoviedb.org/3/discover/movie?api_key=' \
-                    + api_key \
+                    + tmdb_key \
                     + '&primary_release_date.gte=' + start_date \
                     + '&primary_release_date.lte=' + end_date \
                     + '&include_adult=false' \
@@ -67,18 +65,13 @@ def list_of_films(start_date, end_date):
 def get_film_details(films):
     """Query TMDb for details on a list of movies."""
 
-    import requests
-    import config
-    api_key = config.tmdb_key
-    from tqdm import tqdm_notebook as tqdm
-
     films_list = []
 
     for film in tqdm(films):
         try:
             entry = requests.get('https://api.themoviedb.org/3/movie/'
                                    + str(film['id'])
-                                   + '?api_key=' + api_key
+                                   + '?api_key=' + tmdb_key
                                    + '&language=en-US'
                                    + '&append_to_response=credits'
                                 )
@@ -99,8 +92,6 @@ def get_film_list_details(films):
     creates problems and tends to break.
     """
 
-    from tqdm import tqdm_notebook as tqdm
-
     print('Get details for each film.')
 
     idchunks = [films[x:x + 250] for x in range(0, len(films), 250)]
@@ -114,7 +105,12 @@ def get_film_list_details(films):
 
 
 def get_imdb_data(film_df):
-    from bs4 import BeautifulSoup
+    """Scrape IMBd for budget and revenue data for specific films.
+
+    Performs a scrape of IMDb film pages for their budget and revenue details.
+    Expected input is a dataframe of those films we don't already have this
+    data on, but in principle it doesn't matter.
+    """
 
     budget_list = []
     revenue_list = []
@@ -165,8 +161,6 @@ def get_imdb_data(film_df):
 def bin_budget(df):
     """Bin budgets into different buckets."""
 
-    import pandas as pd
-
     # bins = [0, 2000000, 5000000, 10000000, 30000000,
     #         50000000, 100000000, 250000000, 300000000]
     #
@@ -192,10 +186,6 @@ def build_films_df(films_list):
     budgets and revenues for inflation, and bin budgets into buckets.
     """
 
-    import pandas as pd
-    import cpi
-    import movies
-
     df = pd.DataFrame(films_list) \
         .drop(columns=['adult', 'backdrop_path', 'homepage',
                        'overview', 'poster_path', 'tagline', 'video',
@@ -208,16 +198,17 @@ def build_films_df(films_list):
 
     df = df.merge(imdb_data, on='imdb_id', how='left')
 
-    print('Get financial information.')
+    print('Fill in missing budget and revenue data with IMDb data.')
     df['budget'].replace(0, df['budget_imdb'], inplace=True)
     df['revenue'].replace(0, df['revenue_imdb'], inplace=True)
     df['budget'].fillna(0, inplace=True)
+
+    print('Get release date information.')
     df['release_date'] = pd.to_datetime(df['release_date'])
-
     df['year'] = df['release_date'].dt.year
-
     df['decade'] = ((df.year)//10)*10
 
+    print('Adjust financial data for inflation.')
     df['budget_adj'] = df.apply(lambda x: cpi.inflate(x['budget'], x['year'])
         if (x['year'] !=2019) else x['budget'], axis=1)
 
@@ -228,9 +219,45 @@ def build_films_df(films_list):
 
     df['profit_adj'] = df['revenue_adj'] - df['budget_adj']
 
-    df = movies.bin_budget(df)
+    df = bin_budget(df)
 
     return df
+
+def get_omdb_data(films):
+    """Search OMDb to get Metacritic, Rotten Tomatoes and IMDb ratings for films."""
+
+    omdb_key = config.omdb_key
+    films_list = []
+    missed = []
+    bad_response = 0
+
+    # Perform a query for each entry from TMDb.
+    for film in tqdm(films['imdb_id']):
+        entry = requests.get('http://omdbapi.com/?i=' + film +
+                             '&apikey=' + omdb_key)
+
+        if entry.status_code==200:
+            f = entry.json()
+            films_list += [f]
+        else:
+            bad_response +=1
+
+    for i,a in enumerate(films_list):
+        a['RT_score']=a['Metacritic_score']=a['IMdb_score']='NaN'
+#         print(a)
+        if len(a['Ratings'])==0:
+            pass
+
+# Iterate through the Ratings element, stored as a list of dictionaries #
+        for b in a['Ratings']:
+            if b['Source'] == 'Internet Movie Database':
+                a['IMdb_score']= float(b['Value'][:3])*10
+            elif b['Source'] == 'Rotten Tomatoes':
+                a['RT_score']= float(b['Value'].split('%')[0])
+            elif b['Source'] == 'Metacritic':
+                a['Metacritic_score'] = float(b['Value'].split('/')[0])
+
+    return films_list
 
 
 def rankings(director_df, director=False, actor=False):
@@ -239,8 +266,6 @@ def rankings(director_df, director=False, actor=False):
     Calculate the total films, profit and budgets for directors, their average
     profit per film, and then their rankings for each of those categories.
     """
-
-    import pandas as pd
 
     if director == True:
         role = 'director'
@@ -274,8 +299,6 @@ def rankings_decades(director_df, director=False, actor=False):
     profit per film, and then their rankings for each of those categories.
     """
 
-    import pandas as pd
-
     if director == True:
         role = 'director'
     if actor == True:
@@ -307,8 +330,6 @@ def rankings_years(director_df, director=False, actor=False):
     For each year, calculate the total films, profit and budgets for directors, their average
     profit per film, and then their rankings for each of those categories.
     """
-
-    import pandas as pd
 
     if director == True:
         role = 'director'
