@@ -241,21 +241,25 @@ def get_omdb_data(films):
             films_list += [f]
         else:
             bad_response +=1
+            print('Couldn\'t get ' + 'http://omdbapi.com/?i=' + film + '&apikey=' + omdb_key)
 
     for i,a in enumerate(films_list):
         a['RT_score']=a['Metacritic_score']=a['IMdb_score']='NaN'
 #         print(a)
-        if len(a['Ratings'])==0:
-            pass
+        try:
+            if len(a['Ratings'])==0:
+                pass
 
 # Iterate through the Ratings element, stored as a list of dictionaries #
-        for b in a['Ratings']:
-            if b['Source'] == 'Internet Movie Database':
-                a['IMdb_score']= float(b['Value'][:3])*10
-            elif b['Source'] == 'Rotten Tomatoes':
-                a['RT_score']= float(b['Value'].split('%')[0])
-            elif b['Source'] == 'Metacritic':
-                a['Metacritic_score'] = float(b['Value'].split('/')[0])
+            for b in a['Ratings']:
+                if b['Source'] == 'Internet Movie Database':
+                    a['IMdb_score']= float(b['Value'][:3])*10
+                elif b['Source'] == 'Rotten Tomatoes':
+                    a['RT_score']= float(b['Value'].split('%')[0])
+                elif b['Source'] == 'Metacritic':
+                    a['Metacritic_score'] = float(b['Value'].split('/')[0])
+        except:
+            continue
 
     return films_list
 
