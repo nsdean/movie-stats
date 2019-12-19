@@ -36,8 +36,9 @@ def list_of_films(start_date, end_date, votes=50):
 
     Note that '&with_release_type=1|2|3&region=US' selects only US premieres,
     theatrical releases and limited theatrical releases, '&vote_count.gte=50'
-    filters films with fewer than 50 votes, and '&without_genres=99|10770'
-    filters out documentaries and TV movies.
+    filters films with fewer than 50 votes, '&without_genres=99|10770' filters
+    out documentaries and TV movies, and '&without_keywords=214549' removes
+    films tagged as shorts.
     """
 
     query_string = 'https://api.themoviedb.org/3/discover/movie?api_key=' \
@@ -48,7 +49,8 @@ def list_of_films(start_date, end_date, votes=50):
                     + '&with_release_type=1|2|3&region=US' \
                     + '&sort_by=vote_average.desc' \
                     + '&vote_count.gte={}'.format(votes) \
-                    + '&without_genres=99|10770'
+                    + '&without_genres=99|10770' \
+                    + '&without_keywords=214549'
 
     pages = requests.get(query_string).json()['total_pages']
 
