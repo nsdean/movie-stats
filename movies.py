@@ -7,10 +7,10 @@ omdb_key = config.omdb_key
 from bs4 import BeautifulSoup
 import cpi
 
-def get_films_data(start_date, end_date):
+def get_films_data(start_date, end_date, votes=50):
     """Build a dataframe of information about movies between two dates."""
 
-    films = list_of_films(start_date, end_date)
+    films = list_of_films(start_date, end_date, votes)
     films_list = get_film_list_details(films)
     df = build_films_df(films_list)
     print('Done.')
@@ -18,7 +18,7 @@ def get_films_data(start_date, end_date):
     return df
 
 
-def list_of_films(start_date, end_date):
+def list_of_films(start_date, end_date, votes=50):
     """Query TMDb for movies between two dates.
 
     Will run requests of TMDb API for movies with US theatrical release dates
@@ -34,9 +34,10 @@ def list_of_films(start_date, end_date):
 
     Returns a list of dictionaries.  Each dictionary is one film.
 
-    Note that '&with_release_type=3&region=US' selects only US theatrical
-    releases, '&vote_count.gte=50' filters films with fewer than 50 votes,
-    and '&without_genres=99|10770' filters out documentaries and TV movies.
+    Note that '&with_release_type=1|2|3&region=US' selects only US premieres,
+    theatrical releases and limited theatrical releases, '&vote_count.gte=50'
+    filters films with fewer than 50 votes, and '&without_genres=99|10770'
+    filters out documentaries and TV movies.
     """
 
     query_string = 'https://api.themoviedb.org/3/discover/movie?api_key=' \
@@ -44,9 +45,9 @@ def list_of_films(start_date, end_date):
                     + '&primary_release_date.gte=' + start_date \
                     + '&primary_release_date.lte=' + end_date \
                     + '&include_adult=false' \
-                    + '&with_release_type=3&region=US' \
+                    + '&with_release_type=1|2|3&region=US' \
                     + '&sort_by=vote_average.desc' \
-                    + '&vote_count.gte=50' \
+                    + '&vote_count.gte={}'.format(votes) \
                     + '&without_genres=99|10770'
 
     pages = requests.get(query_string).json()['total_pages']
@@ -73,7 +74,7 @@ def get_film_details(films):
                                    + str(film['id'])
                                    + '?api_key=' + tmdb_key
                                    + '&language=en-US'
-                                   + '&append_to_response=credits'
+                                   + '&append_to_response=credits,keywords'
                                 )
             entry = (entry.json())
             films_list += [entry]
@@ -187,9 +188,8 @@ def build_films_df(films_list):
     """
 
     df = pd.DataFrame(films_list) \
-        .drop(columns=['adult', 'backdrop_path', 'homepage',
-                       'overview', 'poster_path', 'tagline', 'video',
-                       'belongs_to_collection', 'original_title'])
+        .drop(columns=['adult', 'backdrop_path', 'homepage', 'poster_path',
+            'tagline', 'video', 'belongs_to_collection', 'original_title'])
 
     print('Get missing budget and revenue data from IMDb.')
     no_budget_revenue = df[(df['budget']==0) | (df['revenue']==0)].reset_index(drop=True)
@@ -220,6 +220,11 @@ def build_films_df(films_list):
     df['profit_adj'] = df['revenue_adj'] - df['budget_adj']
 
     df = bin_budget(df)
+
+    print('Unpack keywords and genres')
+    df['keywords'] = [[d['name'] for d in dictlist['keywords']] for dictlist in df['keywords']]
+
+    df['genres'] = [[d['name'] for d in dictlist] for dictlist in df['genres']]
 
     return df
 
