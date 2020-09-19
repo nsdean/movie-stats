@@ -34,11 +34,11 @@ def list_of_films(start_date, end_date, votes=50):
 
     Returns a list of dictionaries.  Each dictionary is one film.
 
-    Note that '&with_release_type=1|2|3&region=US' selects only US premieres,
-    theatrical releases and limited theatrical releases, '&vote_count.gte=50'
-    filters films with fewer than 50 votes, '&without_genres=99|10770' filters
-    out documentaries and TV movies, and '&without_keywords=214549' removes
-    films tagged as shorts.
+    Note that '&with_release_type=1|2|3&region=US|GB' selects only US or GB
+    premieres, theatrical releases and limited theatrical releases,
+    '&vote_count.gte=50' filters films with fewer than 50 votes,
+    '&without_genres=99|10770' filters out documentaries and TV movies, and
+    '&without_keywords=214549' removes films tagged as shorts.
     """
 
     query_string = 'https://api.themoviedb.org/3/discover/movie?api_key=' \
@@ -46,7 +46,7 @@ def list_of_films(start_date, end_date, votes=50):
                     + '&primary_release_date.gte=' + start_date \
                     + '&primary_release_date.lte=' + end_date \
                     + '&include_adult=false' \
-                    + '&with_release_type=1|2|3&region=US' \
+                    + '&with_release_type=1|2|3&region=US|GB' \
                     + '&sort_by=vote_average.desc' \
                     + '&vote_count.gte={}'.format(votes) \
                     + '&without_genres=99|10770' \
